@@ -35,10 +35,4 @@ END
 
 >&2 echo 'PostgreSQL is available'
 
-python manage.py makemigrations
-python manage.py migrate --noinput # no interaction
-# python manage.py collectstatic --noinput
-
-# exec "$@" # run command passed as argument
-
-exec python manage.py runserver 0.0.0.0:8000 # replace the current shell with command
+exec "$@" # run command passed as argument
