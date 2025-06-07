@@ -1,7 +1,9 @@
 services:
   user-service:
     image: neerajbabu/user # image name given to build file
-    build: ./services/user_service # build source
+    build:
+      context: ./services/user_service # set working folder for build
+      dockerfile: Dockerfile # build source
     container_name: ecomm_user_service # container name
     depends_on:
       - user-database
@@ -13,6 +15,9 @@ services:
       - DB_USER=postgres
       - DB_HOST=user-database # database service name
       - DB_PASS=postgres
+      - DB_PORT=5432
+    volumes:
+      - ./services/user_service:/app
 
   user-database:
     image: postgres:17
