@@ -39,12 +39,26 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
-    restart: always
+    restart: unless-stopped
     ports:
       - 9090:9090
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
       - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
     
 volumes:
   user_database_data:
@@ -52,4 +66,6 @@ volumes:
   user_database_data_backup:
     driver: local
   prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
