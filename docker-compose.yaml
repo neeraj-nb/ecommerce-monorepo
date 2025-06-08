@@ -23,7 +23,7 @@ services:
   user-database:
     image: postgres:17
     container_name: user-database
-    restart: always
+    restart: unless-stopped
     ports:
       - 5432:5432
     environment:
@@ -36,8 +36,20 @@ services:
       - user_database_data:/var/lib/postgresql/data
       - user_database_data_backup:/backups
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
+      - prometheus_data:/prometheus
+    
 volumes:
   user_database_data:
     driver: local
   user_database_data_backup:
+    driver: local
+  prometheus_data:
     driver: local
