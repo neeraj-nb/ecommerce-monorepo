@@ -2,7 +2,7 @@
 
 set -e # exit on error
 
->&2 echo "Wating for PostgreSQl..." # print to stderr
+echo "Wating for PostgreSQl..." # print to stderr
 
 # checking for postgres using python
 python << END
@@ -33,6 +33,6 @@ while True:
     time.sleep(1)
 END
 
->&2 echo 'PostgreSQL is available'
+echo 'PostgreSQL is available'
 
 exec "$@" # run command passed as argument
