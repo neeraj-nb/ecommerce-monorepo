@@ -77,6 +77,20 @@ services:
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
 
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    restart: unless-stopped
+    ports:
+      - 3200:3200
+      - 9095:9095
+      - 4317:4317
+    command:
+      - "-config.file=/etc/tempo.yaml"
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     container_name: elasticsearch
@@ -125,4 +139,6 @@ volumes:
   grafana_data:
     driver: local
   elasticsearch_data:
+    driver: local
+  tempo_data:
     driver: local

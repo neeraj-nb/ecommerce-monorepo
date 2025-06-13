@@ -11,11 +11,16 @@ exporters:
   debug:
     verbosity: detailed
 
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [otlp/tempo, debug]
 
     metrics:
       receivers: [otlp]
