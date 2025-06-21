@@ -28,7 +28,8 @@ jobs:
               services+=("\"$dir"\")
             fi
           done
-           matrix="{\"include\": [$(IFS=,; echo "{\"service\": ${services[*]}}")]}
+          matrix="{\"include\": [$(printf '{"service":%s},' "${services[@]}" | sed 's/,$//')]}"
+          echo $matrix
           echo "matrix=$matrix"
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
   
