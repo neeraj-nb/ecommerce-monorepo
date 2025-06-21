@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'sevices/**'
 
 jobs:
 
@@ -19,21 +21,21 @@ jobs:
       - name: Get changed directories
         id: set-matrix
         run: |
-          changed=$(git diff --name-only ${{ github.event.pull_request.base.ref }} ${{ github.github.event.pull_request.base.sha }} | cut -d/ -f1 | sort -u)
+          changed=$(git diff --name-only ${{ github.event.pull_request.base.ref }} ${{ github.github.event.pull_request.base.sha }} | cut -d/ -f2 | sort -u)
           services=()
           for dir in $changed; do
-            if [ -f "$dir/Dockerfile" ]; then
+            if [ -f "services/$dir/Dockerfile" ]; then
               services+=("\"$dir"\")
             fi
           done
-          matrix="{\"include\": [$(IFS=,; echo "${services[*]}")]}"
+           matrix="{\"include\": [$(IFS=,; echo "{\"service\": ${services[*]}}")]}
           echo "matrix=$matrix"
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
   
   build-and-push:
     needs: detect-changes
     runs-on: ubuntu-latest
-    if: needs.detect-changes.outputs.matrix != '{}'
+    if: fromJson(needs.detect-changes.outputs.matrix).include != ''
     strategy:
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
     steps:
@@ -48,7 +50,36 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          service=${{ matrix.include }}
-          tag=${GITHUB_SHA::8}
+          service=${{ matrix.service }}
+          tag=${{ github.run_id }}
+          echo "Building $service service"
           docker build -t myrepo/$service:$tag ./$service
-          docker push myrepo/$service:$tag
+          echo "Pushing $service service"
+          docker push ${{ secrets.DOCKER_USERNAME }}/$service:$tag
+
+  update-manifest:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: fromJson(needs.detect-changes.outputs.matrix).include != ''
+    steps:
+      - name: Checkout infra repo
+        uses: actions/checkout@v4
+        with:
+          repository: neeraj-nb/ecommerce-infra
+          token: ${{ secrets.INFRA_REPO_ACCESS_TOKEN }}
+
+      - name: Update tag in manifest
+        run: |
+          SERVICE_JSON=${{ fromJson(needs.detect-changes.outputs.matrix) }}
+          mapfile -t services < <(echo $SERVICE_JSON | jq -c '.include[].service')
+          for s in "${services[@]}"; do
+            sed -Ei '/image/ s/(:[^:]*:)[0-9]+/\1${{ github.run_id }}/' k8s/services/$s/deployment.yaml
+          done
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "generated"
+          git push
