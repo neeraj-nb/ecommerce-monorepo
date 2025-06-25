@@ -28,14 +28,42 @@ jobs:
               services+=("\"$dir"\")
             fi
           done
-           matrix="{\"include\": [$(IFS=,; echo "{\"service\": ${services[*]}}")]}
-          echo "matrix=$matrix"
-          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+          # matrix="{\"include\": [$(printf '{"service":%s},' "${services[@]}" | sed 's/,$//')]}"
+          # echo $matrix
+          # output="'matrix=$matrix'"
+          # echo $output
+          # # echo $output >> "$GITHUB_OUTPUT"
+          # echo '"matrix={'include':[{'service':'a'}]}"' >> "$GITHUB_OUTPUT"
+
+          # csv=$(IFS=,; echo "${services[*]}")
+          # echo "SERVICES=$csv" >> "$GITHUB_OUTPUT"
+
+          service_str="${services[*]}"
+          python3 <<EOF >> "$value"
+          import sys
+          services = sys.argv[1].split()
+
+          data = {
+            "include": [{"service": name} for name in services]
+          }
+
+          print(json.dumps(data))
+          EOF $service_str 
+          echo $value
+
+
+  debug:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug output
+        run: echo "${{ needs.detect-changes.outputs.matrix }}"
   
   build-and-push:
     needs: detect-changes
     runs-on: ubuntu-latest
-    if: fromJson(needs.detect-changes.outputs.matrix).include != ''
+    if: fromJson(needs.detect-changes.outputs).include != ''
     strategy:
       matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
     steps:
