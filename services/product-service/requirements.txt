@@ -4,6 +4,7 @@ djangorestframework-simplejwt
 psycopg2-binary
 gunicorn
 requests
+drf-nested-routers
 
 opentelemetry-api
 opentelemetry-sdk

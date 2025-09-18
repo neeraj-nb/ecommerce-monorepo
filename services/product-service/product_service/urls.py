@@ -15,9 +15,22 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from products.views import ProductViewSet, ReviewViewSet
+from rest_framework_nested.routers import NestedDefaultRouter
+
+# Product routes
+router = DefaultRouter()
+router.register('products', ProductViewSet, basename='product')
+
+# Nested review routes
+product_router = NestedDefaultRouter(router, 'products', lookup='product')
+product_router.register('reviews', ReviewViewSet, basename='product-reviews')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     # path('api/', include('app.urls')),
     path('', include('health.urls')),
+    path('api/', include(router.urls)),
+    path('api/', include(product_router.urls)),
 ]
