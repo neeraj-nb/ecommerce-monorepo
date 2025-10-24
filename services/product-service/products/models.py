@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.text import slugify
 
 class Product(models.Model):
     name = models.CharField(max_length=100)
@@ -21,8 +22,9 @@ class Product(models.Model):
     class Meta:
         ordering = ['-created_at']
 
-    def _str_(self):
-        return self.name
+    def save(self, *args, **kwargs):
+        self.slug = slugify(self.name).lower()
+        return super(Product, self).save(*args, **kwargs)
 
     def update_rating(self):
         """Recalculate average rating and total reviews."""
@@ -44,7 +46,6 @@ class Product(models.Model):
         self.total_reviews = self.total_reviews - 1
         self.average_rating = (self.average_rating * (self.total_reviews+1) - remove)/ self.total_reviews
         self.save()
-
     
     def _str_(self):
         return self.name
