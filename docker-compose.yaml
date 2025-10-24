@@ -181,6 +181,20 @@ services:
     volumes:
       - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
 
+  debug:
+    image: neerajbabu/debug-container
+    build:
+      context: ./utils/debug-container
+      dockerfile: Dockerfile
+    container_name: debug-container
+    stdin_open: true # keeps STDIN open (-i)
+    tty: true # Allocate a TTY (-t)
+    # network_mode: host # full network access
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: /bin/bash
+
     
 volumes:
   user_database_data:
