@@ -5,6 +5,7 @@ psycopg2-binary
 gunicorn
 requests
 drf-nested-routers
+Pillow
 
 opentelemetry-api
 opentelemetry-sdk
