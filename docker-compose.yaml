@@ -76,6 +76,7 @@ services:
       - DB_HOST=product-database # database service name
       - DB_PASS=postgres
       - DB_PORT=5432
+      - USE_S3=False
       - OTEL_SERVICE_NAME=product-service
       - OTEL_TRACES_EXPORTER=console,otlp
       - OTEL_METRICS_EXPORTER=console

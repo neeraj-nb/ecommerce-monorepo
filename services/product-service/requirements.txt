@@ -1,11 +1,13 @@
 Django>=4.2
 djangorestframework
 djangorestframework-simplejwt
+django-storages
 psycopg2-binary
 gunicorn
 requests
 drf-nested-routers
 Pillow
+boto3
 
 opentelemetry-api
 opentelemetry-sdk
