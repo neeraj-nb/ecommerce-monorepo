@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'health',
     'rest_framework_simplejwt',
+    'products',
 ]
 
 MIDDLEWARE = [
@@ -60,7 +61,7 @@ REST_FRAMEWORK = {
     ),
 }
 
-AUTH_USER_MODEL = 'users.User'
+# AUTH_USER_MODEL = 'users.User'
 
 TEMPLATES = [
     {
