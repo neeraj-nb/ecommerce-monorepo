@@ -8,6 +8,7 @@ requests
 drf-nested-routers
 Pillow
 boto3
+faker
 
 opentelemetry-api
 opentelemetry-sdk
