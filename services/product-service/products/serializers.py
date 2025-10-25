@@ -4,14 +4,14 @@ from .util import fetch_user_data
 
 
 class ReviewSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField(read_only=True)
-
+    user_id = serializers.StringRelatedField(read_only=True)
+    # TODO : Broken
     class Meta:
         model = Review
-        fields = ['id', 'user', 'rating', 'comment', 'created_at']
-        read_only_fields = ['id', 'user', 'created_at']
+        fields = ['id', 'user_id', 'rating', 'comment', 'created_at']
+        read_only_fields = ['id', 'user_id', 'created_at']
 
-    def get_user(self, obj):
+    def get_user_id(self, obj):
         return fetch_user_data(obj.user_id, token=self.context.get('request').auth)
 
 
