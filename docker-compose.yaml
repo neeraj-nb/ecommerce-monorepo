@@ -23,6 +23,8 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://user-service-otel-agent:4318
     volumes:
       - ./services/user-service:/app
+    networks:
+      - ecom-net
     command: /start.dev.sh
 
   user-database:
@@ -40,6 +42,8 @@ services:
     volumes:
       - user_database_data:/var/lib/postgresql/data
       - user_database_data_backup:/backups
+    networks:
+      - ecom-net
 
   user-service-otel-agent:
     image: otel/opentelemetry-collector:latest
@@ -47,10 +51,72 @@ services:
     restart: unless-stopped
     volumes:
       - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    networks:
+      - ecom-net
     command: ["--config=/etc/otel/config.yaml"]
     ports:
       - "4318:4318"    # OTLP HTTP ingest
       - "9464:9464"    # Prometheus metrics endpoint
+
+  product-service:
+    image: neerajbabu/product-service # image name given to build file
+    build:
+      context: ./services/product-service # set working folder for build
+      dockerfile: Dockerfile # build source
+    container_name: product-service # container name
+    depends_on:
+      - product-database
+    ports:
+      - 8001:8000
+    environment:
+      - JWT_SECRET=value
+      - DEBUG=True
+      - DB_NAME=product
+      - DB_USER=postgres
+      - DB_HOST=product-database # database service name
+      - DB_PASS=postgres
+      - DB_PORT=5432
+      - USE_S3=False
+      - OTEL_SERVICE_NAME=product-service
+      - OTEL_TRACES_EXPORTER=console,otlp
+      - OTEL_METRICS_EXPORTER=console
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://product-service-otel-agent:4319
+    volumes:
+      - ./services/product-service:/app
+    networks:
+      - ecom-net
+    command: /start.dev.sh
+
+  product-database:
+    image: postgres:17
+    container_name: product-database
+    restart: unless-stopped
+    ports:
+      - 5433:5432
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=product
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    volumes:
+      - product_database_data:/var/lib/postgresql/data
+      - product_database_data_backup:/backups
+    networks:
+      - ecom-net
+
+  product-service-otel-agent:
+    image: otel/opentelemetry-collector:latest
+    container_name: product-service-otel-agent
+    restart: unless-stopped
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    networks:
+      - ecom-net
+    command: ["--config=/etc/otel/config.yaml"]
+    ports:
+      - "4319:4318"    # OTLP HTTP ingest
+      - "9465:9464"    # Prometheus metrics endpoint
 
   prometheus:
     image: prom/prometheus:latest
@@ -62,6 +128,8 @@ services:
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
       - prometheus_data:/prometheus
+    networks:
+      - ecom-net
 
   grafana:
     image: grafana/grafana:latest
@@ -76,6 +144,8 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+    networks:
+      - ecom-net
 
   tempo:
     image: grafana/tempo:latest
@@ -90,6 +160,8 @@ services:
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml
       - tempo_data:/var/tempo
+    networks:
+      - ecom-net
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
@@ -103,6 +175,8 @@ services:
       - "9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - ecom-net
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.13.4
@@ -115,6 +189,8 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - xpack.security.enabled=false
+    networks:
+      - ecom-net
 
   logstash:
     image: docker.elastic.co/logstash/logstash:9.0.0
@@ -127,12 +203,34 @@ services:
       - 9600:9600
     volumes:
       - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    networks:
+      - ecom-net
+
+  debug:
+    image: neerajbabu/debug-container
+    build:
+      context: ./utils/debug-container
+      dockerfile: Dockerfile
+    container_name: debug-container
+    stdin_open: true # keeps STDIN open (-i)
+    tty: true # Allocate a TTY (-t)
+    # network_mode: host # full network access
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    networks:
+      - ecom-net
+    command: /bin/bash
 
     
 volumes:
   user_database_data:
     driver: local
   user_database_data_backup:
+    driver: local
+  product_database_data:
+    driver: local
+  product_database_data_backup:
     driver: local
   prometheus_data:
     driver: local
@@ -142,3 +240,7 @@ volumes:
     driver: local
   tempo_data:
     driver: local
+
+networks:
+  ecom-net:
+    driver: bridge

@@ -11,3 +11,8 @@ scrape_configs:
       - targets:
           - user-service-otel-agent:9464
     metrics_path: /metrics
+
+  - job_name: "product-service"
+    static_configs:
+      - targets:
+          - product-service-otel-agent:9464
