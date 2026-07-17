@@ -7,6 +7,7 @@ from rest_framework.generics import (
     ListCreateAPIView
 )
 from rest_framework.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
 from .models import Product, Review
 from .serializers import ProductSerializer, ReviewSerializer
 
@@ -25,18 +26,19 @@ class ProductCreateView(CreateAPIView):
 
 class ReviewListCreateView(ListCreateAPIView):
     serializer_class = ReviewSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+    # Anyone can read reviews; only authenticated users may post one.
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
         product_id = self.kwargs['product_pk']
         return Review.objects.filter(product_id=product_id)
 
     def perform_create(self, serializer):
-        product_id = self.kwargs['product_pk']
-        product = Product.objects.get(id=product_id)
+        product = get_object_or_404(Product, id=self.kwargs['product_pk'])
+        user_id = self.request.user.id  # from the verified JWT (RemoteUser)
 
         # Check if user already reviewed
-        if Review.objects.filter(product=product, user=self.request.user).exists():
+        if Review.objects.filter(product=product, user_id=user_id).exists():
             raise ValidationError("You have already reviewed this product.")
 
-        serializer.save(user=self.request.user, product=product)
+        serializer.save(user_id=user_id, product=product)

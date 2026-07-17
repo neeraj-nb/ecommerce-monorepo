@@ -17,7 +17,8 @@ class VerifyTokenView(APIView):
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
             return Response({
                 "valid": True,
-                "user_id": payload.get("sub"),
+                "user_id": payload.get("user_id"),
+                "email": payload.get("email"),
                 "role": payload.get("role", "user"),
             })
         except jwt.ExpiredSignatureError:

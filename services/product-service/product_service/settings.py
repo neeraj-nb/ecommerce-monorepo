@@ -58,7 +58,7 @@ ROOT_URLCONF = 'product_service.urls'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'product_service.authentication.ServiceJWTAuthentication',
     ),
 }
 

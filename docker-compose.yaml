@@ -77,6 +77,7 @@ services:
       - DB_PASS=postgres
       - DB_PORT=5432
       - USE_S3=False
+      - USER_SERVICE_URL=http://user-service:8000/api
       - OTEL_SERVICE_NAME=product-service
       - OTEL_TRACES_EXPORTER=console,otlp
       - OTEL_METRICS_EXPORTER=console

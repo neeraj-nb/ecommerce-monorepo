@@ -53,7 +53,7 @@ class Product(models.Model):
 class Review(models.Model):
     
     product = models.ForeignKey(Product, related_name='reviews', on_delete=models.CASCADE)
-    user_id = models.UUIDField()  # reference to external user service
+    user_id = models.PositiveBigIntegerField()  # external user-service id (JWT 'user_id' claim)
     rating = models.PositiveSmallIntegerField()  # 1-5 stars
     title = models.CharField(max_length=100)
     comment = models.TextField(blank=True, null=True)
