@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'health',
     'rest_framework_simplejwt',
+    'orders',
 ]
 
 MIDDLEWARE = [
@@ -137,4 +138,11 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Other services (synchronous reads only; mutations go through Kafka events).
 USER_SERVICE_URL = os.environ.get('USER_SERVICE_URL')
+PRODUCT_SERVICE_URL = os.environ.get('PRODUCT_SERVICE_URL')
+
+# Event bus (Kafka / Redpanda). Comma-separated list of bootstrap servers.
+KAFKA_BOOTSTRAP_SERVERS = os.environ.get(
+    'KAFKA_BOOTSTRAP_SERVERS', 'redpanda:9092'
+).split(',')

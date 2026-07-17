@@ -1,79 +1,142 @@
+from decimal import Decimal
+
 from django.db import models
-from django.utils.text import slugify
 
 
+class Cart(models.Model):
+    """A user's active shopping cart. One active cart per user_id at a time."""
 
-class Product(models.Model):
-    name = models.CharField(max_length=100)
-    desc = models.TextField(max_length=500)
-    category = models.CharField(max_length=50, null=True)
-    slug = models.SlugField(max_length=50, unique=True, editable=False)
-    picture = models.ImageField(upload_to="products/images",null=True,blank=True)
-    stock = models.PositiveIntegerField()
-    price = models.DecimalField(max_digits=10,decimal_places=2)
-    discount_price = models.DecimalField(max_digits=10,decimal_places=2)
-    sold_by = models.CharField(max_length=100)
-    is_available = models.BooleanField(default=True)
-    is_visible = models.BooleanField(default=True)
-    is_active = models.BooleanField(default=True)
-    average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.0)  # Auto updated
-    total_reviews = models.PositiveIntegerField(default=0)
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CHECKED_OUT = "checked_out", "Checked out"
+
+    user_id = models.PositiveBigIntegerField()  # external user-service id (JWT 'user_id')
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.ACTIVE
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-created_at']
+        constraints = [
+            # At most one active cart per user (checked-out carts are kept for history).
+            models.UniqueConstraint(
+                fields=["user_id"],
+                condition=models.Q(status="active"),
+                name="unique_active_cart_per_user",
+            )
+        ]
 
-    def save(self, *args, **kwargs):
-        self.slug = slugify(self.name).lower()
-        return super(Product, self).save(*args, **kwargs)
+    def __str__(self):
+        return f"Cart<{self.id}> user={self.user_id} ({self.status})"
 
-    def update_rating(self):
-        """Recalculate average rating and total reviews."""
-        reviews = self.reviews.all()
-        self.total_reviews = reviews.count()
-        self.average_rating = (
-            reviews.aggregate(models.Avg('rating'))['rating__avg'] or 0
-        )
-        self.save()
-        
-    def update_rating_add(self, new):
-        """Recalculate average rating and total reviews."""
-        self.total_reviews = self.total_reviews + 1
-        self.average_rating = (self.average_rating * (self.total_reviews-1) + new)/ self.total_reviews
-        self.save()
-        
-    def update_rating_delete(self, remove):
-        """Recalculate average rating and total reviews."""
-        self.total_reviews = self.total_reviews - 1
-        self.average_rating = (self.average_rating * (self.total_reviews+1) - remove)/ self.total_reviews
-        self.save()
-    
-    def _str_(self):
-        return self.name
-        
-class Review(models.Model):
-    
-    product = models.ForeignKey(Product, related_name='reviews', on_delete=models.CASCADE)
-    user_id = models.UUIDField()  # reference to external user service
-    rating = models.PositiveSmallIntegerField()  # 1-5 stars
-    title = models.CharField(max_length=100)
-    comment = models.TextField(blank=True, null=True)
+    @property
+    def total_amount(self):
+        return sum((item.subtotal for item in self.items.all()), Decimal("0.00"))
+
+
+class CartItem(models.Model):
+    """A product line in a cart. Product name/price are snapshotted from the
+    product-service at add time (a synchronous read); stock is not touched here."""
+
+    cart = models.ForeignKey(Cart, related_name="items", on_delete=models.CASCADE)
+    product_id = models.PositiveBigIntegerField()  # external product-service id
+    product_name = models.CharField(max_length=100)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('product', 'user_id')  # Prevent duplicate reviews by the same user
-        ordering = ['-created_at']
+        unique_together = ("cart", "product_id")  # one line per product per cart
 
-    def _str_(self):
-        return f"{self.product.name} - {self.title}"
+    def __str__(self):
+        return f"{self.quantity} x {self.product_name} (cart {self.cart_id})"
 
-    def save(self, *args, **kwargs):
-        """Override save to auto-update product rating."""
-        super().save(*args, **kwargs)
-        self.product.update_rating_add(self.rating)
-        
-    def delete(self, *args, **kwargs):
-        """Override delete to auto-update product rating."""
-        super().delete(*args, **kwargs)
-        self.product.update_rating_delete(self.rating)
+    @property
+    def subtotal(self):
+        return self.unit_price * self.quantity
+
+
+class Order(models.Model):
+    """An order and its saga state.
+
+    Lifecycle (choreography saga):
+        PENDING            -> created at checkout, order.created emitted
+        INVENTORY_RESERVED -> inventory.reserved received
+        CONFIRMED          -> payment.succeeded received (terminal, success)
+        CANCELLED          -> inventory.rejected / payment.failed / user cancel
+                              (terminal; order.cancelled emitted for compensation)
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending inventory"
+        INVENTORY_RESERVED = "inventory_reserved", "Inventory reserved / awaiting payment"
+        CONFIRMED = "confirmed", "Confirmed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    # States from which a user may still cancel, and non-terminal states.
+    CANCELLABLE_STATUSES = {Status.PENDING, Status.INVENTORY_RESERVED}
+    TERMINAL_STATUSES = {Status.CONFIRMED, Status.CANCELLED}
+
+    user_id = models.PositiveBigIntegerField()  # external user-service id
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="USD")
+
+    # Denormalised shipping snapshot (order owns its shipping data).
+    shipping_name = models.CharField(max_length=120, blank=True)
+    shipping_address = models.TextField(blank=True)
+
+    # Reason recorded when an order is cancelled/failed.
+    cancel_reason = models.CharField(max_length=255, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Order<{self.id}> user={self.user_id} ({self.status})"
+
+    @property
+    def is_terminal(self):
+        return self.status in self.TERMINAL_STATUSES
+
+    @property
+    def can_cancel(self):
+        return self.status in self.CANCELLABLE_STATUSES
+
+
+class OrderItem(models.Model):
+    """A line in an order. Price/name are snapshotted at checkout so the order
+    is immutable against later product changes."""
+
+    order = models.ForeignKey(Order, related_name="items", on_delete=models.CASCADE)
+    product_id = models.PositiveBigIntegerField()
+    product_name = models.CharField(max_length=100)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product_name} (order {self.order_id})"
+
+    @property
+    def subtotal(self):
+        return self.unit_price * self.quantity
+
+
+class ProcessedEvent(models.Model):
+    """Idempotency ledger for the consumer. An incoming event is processed only
+    if its event_id has not been seen before, making consumption safe against
+    Kafka's at-least-once redelivery."""
+
+    event_id = models.UUIDField(unique=True)
+    event_type = models.CharField(max_length=100)
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.event_type}:{self.event_id}"
