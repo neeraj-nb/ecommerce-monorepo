@@ -1,0 +1,81 @@
+# Mutagen Compose override -- edit on the laptop, run `docker compose` FROM the
+# laptop against a REMOTE AWS Docker context (an alternative to `mutagen.yml`,
+# where you instead SSH into the VM to run compose).
+#
+# Because a remote context runs containers on the EC2 daemon, the base file's
+# host bind mounts (./services/*:/app) would resolve to non-existent paths on the
+# VM. This override replaces them with named volumes that Mutagen Compose keeps
+# in sync from your laptop (code stays local; VM-generated migrations flow back).
+#
+# Prereqs:
+#   1. `mutagen-compose` installed on the laptop (it wraps `docker compose`).
+#   2. Docker Compose v2.24+ (needed for the `!override` YAML tag below).
+#   3. A remote Docker context pointing at the EC2 box:
+#        docker context create aws --docker "host=ssh://ubuntu@<ec2-host>"
+#        docker context use aws
+#      (needs an ~/.ssh/config `ecom-vm`/`ubuntu@<host>` alias + working key.)
+#
+# Use (note: mutagen-compose, not docker compose):
+#   mutagen-compose -f docker-compose.yaml -f docker-compose.mutagen.yml up
+#   mutagen-compose -f docker-compose.yaml -f docker-compose.mutagen.yml \
+#       --profile observability up          # add the observability stack
+#   mutagen-compose ... down
+#
+# Ports publish on the VM; reach them from the laptop via the `forward:` sessions
+# in mutagen.yml (`mutagen project start`) or ~/.ssh/config LocalForward entries.
+
+x-mutagen:
+  sync:
+    defaults:
+      mode: "two-way-resolved"
+      ignore:
+        vcs: true
+        paths:
+          - "__pycache__"
+          - "*.pyc"
+          - "*.log"
+          - "staticfiles"
+    user:
+      alpha: "./services/user-service"
+      beta: "volume://user_code"
+    product:
+      alpha: "./services/product-service"
+      beta: "volume://product_code"
+    order:
+      alpha: "./services/order-service"
+      beta: "volume://order_code"
+    payment:
+      alpha: "./services/payment-service"
+      beta: "volume://payment_code"
+
+services:
+  user-service:
+    volumes: !override
+      - user_code:/app
+
+  product-service:
+    volumes: !override
+      - product_code:/app
+  product-consumer:
+    volumes: !override
+      - product_code:/app
+
+  order-service:
+    volumes: !override
+      - order_code:/app
+  order-consumer:
+    volumes: !override
+      - order_code:/app
+
+  payment-service:
+    volumes: !override
+      - payment_code:/app
+  payment-consumer:
+    volumes: !override
+      - payment_code:/app
+
+volumes:
+  user_code:
+  product_code:
+  order_code:
+  payment_code:

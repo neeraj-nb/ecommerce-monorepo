@@ -1,0 +1,64 @@
+# Mutagen project file -- edit on the laptop, run the stack on an AWS EC2 VM.
+#
+# Workflow ("run compose ON the VM"): your code lives on the laptop; Mutagen
+# mirrors it to /home/ubuntu/ecom on the EC2 box and forwards the service ports
+# back to your laptop's localhost. You SSH in and run `docker compose` there, so
+# the existing bind mounts + Django runserver auto-reload work unchanged, and the
+# migrations `start.dev.sh` generates on the VM sync back to the laptop to commit.
+#
+# Prereqs:
+#   1. Mutagen installed on the laptop (winget install mutagen-io.mutagen).
+#   2. An SSH host alias `ecom-vm` in ~/.ssh/config pointing at the EC2 instance
+#      (User ubuntu, your key). Test with `ssh ecom-vm`.
+#   3. Docker Engine + compose plugin installed on the VM.
+#
+# Use:
+#   mutagen project start        # begin sync + port forwarding
+#   ssh ecom-vm                   # then:  cd ~/ecom && docker compose up
+#   mutagen project list         # health of sync/forward sessions
+#   mutagen project terminate    # stop everything
+#
+# Then browse http://localhost:8001 etc. on the laptop (see forwards below).
+
+sync:
+  defaults:
+    mode: "two-way-resolved"   # laptop (alpha) wins conflicts; VM-generated migrations flow back
+    ignore:
+      vcs: true                # honour .gitignore
+      paths:
+        - "__pycache__"
+        - "*.pyc"
+        - "*.log"
+        - "staticfiles"
+        - ".venv"
+        - "*.sqlite3"
+  code:
+    alpha: "."
+    beta: "ecom-vm:/home/ubuntu/ecom"
+
+forward:
+  user:
+    source: "tcp:localhost:8000"
+    destination: "ecom-vm:tcp:localhost:8000"
+  product:
+    source: "tcp:localhost:8001"
+    destination: "ecom-vm:tcp:localhost:8001"
+  order:
+    source: "tcp:localhost:8002"
+    destination: "ecom-vm:tcp:localhost:8002"
+  payment:
+    source: "tcp:localhost:8003"
+    destination: "ecom-vm:tcp:localhost:8003"
+  # Observability (only reachable when you run `--profile observability`).
+  grafana:
+    source: "tcp:localhost:3000"
+    destination: "ecom-vm:tcp:localhost:3000"
+  kibana:
+    source: "tcp:localhost:5601"
+    destination: "ecom-vm:tcp:localhost:5601"
+  prometheus:
+    source: "tcp:localhost:9090"
+    destination: "ecom-vm:tcp:localhost:9090"
+  tempo:
+    source: "tcp:localhost:3200"
+    destination: "ecom-vm:tcp:localhost:3200"
