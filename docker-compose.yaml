@@ -48,6 +48,7 @@ services:
   user-service-otel-agent:
     image: otel/opentelemetry-collector:latest
     container_name: user-service-otel-agent
+    profiles: ["observability"]
     restart: unless-stopped
     volumes:
       - ./otel-collector-config.yaml:/etc/otel/config.yaml
@@ -66,9 +67,10 @@ services:
     container_name: product-service # container name
     depends_on:
       - product-database
+      - redpanda
     ports:
       - 8001:8000
-    environment:
+    environment: &product-env
       - JWT_SECRET=value
       - DEBUG=True
       - DB_NAME=product
@@ -78,6 +80,7 @@ services:
       - DB_PORT=5432
       - USE_S3=False
       - USER_SERVICE_URL=http://user-service:8000/api
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
       - OTEL_SERVICE_NAME=product-service
       - OTEL_TRACES_EXPORTER=console,otlp
       - OTEL_METRICS_EXPORTER=console
@@ -87,6 +90,24 @@ services:
     networks:
       - ecom-net
     command: /start.dev.sh
+
+  product-consumer:
+    image: neerajbabu/product-service
+    build:
+      context: ./services/product-service
+      dockerfile: Dockerfile
+    container_name: product-consumer
+    depends_on:
+      - product-database
+      - redpanda
+      - product-service # web owns migrations; consumer just waits and retries
+    environment: *product-env
+    volumes:
+      - ./services/product-service:/app
+    networks:
+      - ecom-net
+    restart: unless-stopped
+    command: python manage.py run_inventory_consumer
 
   product-database:
     image: postgres:17
@@ -109,6 +130,7 @@ services:
   product-service-otel-agent:
     image: otel/opentelemetry-collector:latest
     container_name: product-service-otel-agent
+    profiles: ["observability"]
     restart: unless-stopped
     volumes:
       - ./otel-collector-config.yaml:/etc/otel/config.yaml
@@ -212,6 +234,7 @@ services:
   order-service-otel-agent:
     image: otel/opentelemetry-collector:latest
     container_name: order-service-otel-agent
+    profiles: ["observability"]
     restart: unless-stopped
     volumes:
       - ./otel-collector-config.yaml:/etc/otel/config.yaml
@@ -222,9 +245,97 @@ services:
       - "4320:4318"    # OTLP HTTP ingest
       - "9466:9464"    # Prometheus metrics endpoint
 
+  payment-service:
+    image: neerajbabu/payment-service # image name given to build file
+    build:
+      context: ./services/payment-service # set working folder for build
+      dockerfile: Dockerfile # build source
+    container_name: payment-service # container name
+    depends_on:
+      - payment-database
+      - redpanda
+    ports:
+      - 8003:8000
+    environment: &payment-env
+      - JWT_SECRET=value
+      - DEBUG=True
+      - DB_NAME=payment
+      - DB_USER=postgres
+      - DB_HOST=payment-database # database service name
+      - DB_PASS=postgres
+      - DB_PORT=5432
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:9092
+      # Event that signals an order is ready to charge. Set to "order.created"
+      # to demo payment before product-service's inventory consumer exists.
+      - PAYMENT_TRIGGER_TOPIC=inventory.reserved
+      - PAYMENT_GATEWAY=dummy
+      # always_success (default) | always_fail | random
+      - PAYMENT_MODE=always_success
+      - PAYMENT_FAILURE_RATE=0.3   # P(fail) when PAYMENT_MODE=random
+      - OTEL_SERVICE_NAME=payment-service
+      - OTEL_TRACES_EXPORTER=console,otlp
+      - OTEL_METRICS_EXPORTER=console
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://payment-service-otel-agent:4318
+    volumes:
+      - ./services/payment-service:/app
+    networks:
+      - ecom-net
+    command: /start.dev.sh
+
+  payment-consumer:
+    image: neerajbabu/payment-service
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: payment-consumer
+    depends_on:
+      - payment-database
+      - redpanda
+      - payment-service # web owns migrations; consumer just waits and retries
+    environment: *payment-env
+    volumes:
+      - ./services/payment-service:/app
+    networks:
+      - ecom-net
+    restart: unless-stopped
+    command: python manage.py run_payment_consumer
+
+  payment-database:
+    image: postgres:17
+    container_name: payment-database
+    restart: unless-stopped
+    ports:
+      - 5435:5432
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=payment
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    volumes:
+      - payment_database_data:/var/lib/postgresql/data
+      - payment_database_data_backup:/backups
+    networks:
+      - ecom-net
+
+  payment-service-otel-agent:
+    image: otel/opentelemetry-collector:latest
+    container_name: payment-service-otel-agent
+    profiles: ["observability"]
+    restart: unless-stopped
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    networks:
+      - ecom-net
+    command: ["--config=/etc/otel/config.yaml"]
+    ports:
+      - "4321:4318"    # OTLP HTTP ingest
+      - "9467:9464"    # Prometheus metrics endpoint
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    profiles: ["observability"]
     restart: unless-stopped
     ports:
       - 9090:9090
@@ -238,6 +349,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
+    profiles: ["observability"]
     restart: unless-stopped
     ports:
       - 3000:3000
@@ -254,6 +366,7 @@ services:
   tempo:
     image: grafana/tempo:latest
     container_name: tempo
+    profiles: ["observability"]
     restart: unless-stopped
     ports:
       - 3200:3200
@@ -270,6 +383,7 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     container_name: elasticsearch
+    profiles: ["observability"]
     restart: unless-stopped
     environment:
       - discovery.type=single-node
@@ -285,6 +399,7 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:8.13.4
     container_name: kibana
+    profiles: ["observability"]
     restart: unless-stopped
     depends_on:
       - elasticsearch
@@ -299,6 +414,7 @@ services:
   logstash:
     image: docker.elastic.co/logstash/logstash:9.0.0
     container_name: logstash
+    profiles: ["observability"]
     restart: unless-stopped
     depends_on:
       - elasticsearch
@@ -339,6 +455,10 @@ volumes:
   order_database_data:
     driver: local
   order_database_data_backup:
+    driver: local
+  payment_database_data:
+    driver: local
+  payment_database_data_backup:
     driver: local
   redpanda_data:
     driver: local
