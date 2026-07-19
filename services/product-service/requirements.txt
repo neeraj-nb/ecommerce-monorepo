@@ -9,6 +9,7 @@ drf-nested-routers
 Pillow
 boto3
 faker
+kafka-python
 
 opentelemetry-api
 opentelemetry-sdk

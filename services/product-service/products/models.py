@@ -75,3 +75,52 @@ class Review(models.Model):
         """Override delete to auto-update product rating."""
         super().delete(*args, **kwargs)
         self.product.update_rating_delete(self.rating)
+
+
+class InventoryReservation(models.Model):
+    """Stock held for one order, created when this service reserves inventory in
+    response to ``order.created``. Kept so the reservation can be released back
+    to stock on ``order.cancelled`` (compensation), and so redelivery of the same
+    order does not reserve twice (``order_id`` is unique)."""
+
+    class Status(models.TextChoices):
+        RESERVED = "reserved", "Reserved"
+        RELEASED = "released", "Released"
+
+    order_id = models.PositiveBigIntegerField(unique=True)  # external order-service id
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.RESERVED
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Reservation order={self.order_id} ({self.status})"
+
+
+class ReservationItem(models.Model):
+    """A per-product quantity within a reservation (the amount to give back on release)."""
+
+    reservation = models.ForeignKey(
+        InventoryReservation, related_name="items", on_delete=models.CASCADE
+    )
+    product = models.ForeignKey(
+        Product, related_name="reservation_items", on_delete=models.CASCADE
+    )
+    quantity = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"{self.quantity} x product {self.product_id} (reservation {self.reservation_id})"
+
+
+class ProcessedEvent(models.Model):
+    """Idempotency ledger for the inventory consumer. An incoming event is
+    processed only if its event_id has not been seen before, making consumption
+    safe against Kafka's at-least-once redelivery."""
+
+    event_id = models.UUIDField(unique=True)
+    event_type = models.CharField(max_length=100)
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.event_type}:{self.event_id}"

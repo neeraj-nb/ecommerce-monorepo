@@ -141,6 +141,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 USER_SERVICE_URL = os.environ.get('USER_SERVICE_URL')
 
+# Event bus (Kafka / Redpanda). Comma-separated list of bootstrap servers.
+KAFKA_BOOTSTRAP_SERVERS = os.environ.get(
+    'KAFKA_BOOTSTRAP_SERVERS', 'redpanda:9092'
+).split(',')
+
 
 USE_S3 = os.environ.get('USE_S3', 'FALSE').upper() == 'TRUE'
 
