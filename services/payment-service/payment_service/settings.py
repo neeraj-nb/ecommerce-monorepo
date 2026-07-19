@@ -17,7 +17,9 @@ SECRET_KEY = os.environ.get('JWT_SECRET')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG')
 
-ALLOWED_HOSTS = []
+# Comma-separated; defaults to '*' for dev so in-cluster hostnames
+# (e.g. http://product-service:8000) are accepted. Restrict via env in prod.
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 
 # Application definition

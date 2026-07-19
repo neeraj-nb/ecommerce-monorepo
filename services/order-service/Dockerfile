@@ -25,13 +25,13 @@ COPY . .
 
 EXPOSE 8000
 COPY entrypoint /entrypoint
-RUN chmod +x /entrypoint
+RUN sed -i 's/\r$//' /entrypoint && chmod 0755 /entrypoint
 
 COPY start.dev.sh /start.dev.sh
-RUN chmod +x /start.dev.sh
+RUN sed -i 's/\r$//' /start.dev.sh && chmod 0755 /start.dev.sh
 
 COPY start.prod.sh /start.prod.sh
-RUN chmod +x /start.prod.sh
+RUN sed -i 's/\r$//' /start.prod.sh && chmod 0755 /start.prod.sh
 
 RUN adduser --disabled-password --gecos '' django
 USER django

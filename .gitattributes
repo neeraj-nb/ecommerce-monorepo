@@ -1,0 +1,7 @@
+# Keep container shell scripts LF-only -- they run in Linux images, and a CRLF
+# shebang makes the entrypoint unrunnable ("exec /entrypoint: no such file...").
+*.sh        text eol=lf
+entrypoint  text eol=lf
+
+# Normalize text by default; let git detect binaries.
+* text=auto
