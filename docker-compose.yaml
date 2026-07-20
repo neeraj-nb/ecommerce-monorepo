@@ -84,7 +84,12 @@ services:
       - OTEL_SERVICE_NAME=product-service
       - OTEL_TRACES_EXPORTER=console,otlp
       - OTEL_METRICS_EXPORTER=console
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://product-service-otel-agent:4319
+      # 4318 is the otel-agent's actual internal listen port (every agent uses
+      # 4318 inside the docker network); "4319" was the host-side remap for
+      # external access only ("4319:4318" below) and doesn't exist as a
+      # listener inside the container, so traces/metrics were silently
+      # undeliverable from product-service.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://product-service-otel-agent:4318
     volumes:
       - ./services/product-service:/app
     networks:
@@ -364,7 +369,11 @@ services:
       - ecom-net
 
   tempo:
-    image: grafana/tempo:latest
+    # Pinned (not :latest): Tempo 3.0 removed the ingester/compactor config
+    # sections outright, which broke this stack once already when :latest
+    # silently crossed that major version. See tempo.yaml for the matching
+    # monolithic-mode config (server/distributor/storage/querier only).
+    image: grafana/tempo:3.0.2
     container_name: tempo
     profiles: ["observability"]
     restart: unless-stopped

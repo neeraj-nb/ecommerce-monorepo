@@ -32,6 +32,18 @@ sync:
         - "staticfiles"
         - ".venv"
         - "*.sqlite3"
+    # Alpha is Windows, which has no real POSIX permission bits to propagate, so
+    # Mutagen falls back to a conservative default (0600, owner-only) for files
+    # it creates on the Linux VM. That's fine for app code (containers run as
+    # UID 1000, matching the `ubuntu` sync user by coincidence) but breaks
+    # single-file config bind mounts read by a different container UID --
+    # prometheus.yaml, tempo.yaml, otel-collector-config.yaml were all created
+    # unreadable to their (non-root, non-1000) container processes, crash-
+    # looping those containers with "permission denied". Force world-readable
+    # so every container UID can read its mounted config regardless.
+    permissions:
+      defaultFileMode: "0644"
+      defaultDirectoryMode: "0755"
   code:
     alpha: "."
     beta: "ecom-vm:/home/ubuntu/ecom"

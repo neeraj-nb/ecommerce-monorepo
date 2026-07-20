@@ -1,0 +1,119 @@
+{
+  "title": "Ecommerce Overview",
+  "uid": "ecommerce-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "tags": ["ecommerce"],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "query": "label_values(up{job=~\"user-service|product-service|order-service|payment-service\"}, job)", "refId": "ServiceVar" },
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    { "type": "row", "title": "Overview", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 100, "collapsed": false, "panels": [] },
+
+    {
+      "id": 1, "type": "stat", "title": "Services Up",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(up{job=~\"$service\"})", "legendFormat": "up" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "red", "value": null }, { "color": "green", "value": 1 }
+      ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" }
+    },
+    {
+      "id": 2, "type": "stat", "title": "Request Rate (req/s)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_server_duration_milliseconds_count{job=~\"$service\"}[5m]))", "legendFormat": "req/s" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Error Rate (5xx %)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "100 * sum(rate(http_server_duration_milliseconds_count{job=~\"$service\", http_status_code=~\"5..\"}[5m])) / sum(rate(http_server_duration_milliseconds_count{job=~\"$service\"}[5m]))", "legendFormat": "error %" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "decimals": 1, "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 }
+      ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Active Requests",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(http_server_active_requests{job=~\"$service\"})", "legendFormat": "active" }],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "auto" }
+    },
+
+    { "type": "row", "title": "Traffic & Latency", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "id": 101, "collapsed": false, "panels": [] },
+
+    {
+      "id": 5, "type": "timeseries", "title": "Request Rate by Service",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_server_duration_milliseconds_count{job=~\"$service\"}[5m])) by (job)", "legendFormat": "{{job}}" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "P95 Latency by Service",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{job=~\"$service\"}[5m])) by (job, le))", "legendFormat": "{{job}}" }],
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "5xx Error Rate by Service",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_server_duration_milliseconds_count{job=~\"$service\", http_status_code=~\"5..\"}[5m])) by (job)", "legendFormat": "{{job}}" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Active Requests by Service",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "sum(http_server_active_requests{job=~\"$service\"}) by (job)", "legendFormat": "{{job}}" }],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+
+    { "type": "row", "title": "Inter-Service Calls & Endpoints", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }, "id": 102, "collapsed": false, "panels": [] },
+
+    {
+      "id": 9, "type": "timeseries", "title": "Inter-Service Call P95 Latency (caller -> callee)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(http_client_duration_milliseconds_bucket{job=~\"$service\"}[5m])) by (job, net_peer_name, le))", "legendFormat": "{{job}} -> {{net_peer_name}}" }],
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 10, "type": "table", "title": "Top Endpoints by Request Rate",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 31 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "topk(15, sum(rate(http_server_duration_milliseconds_count{job=~\"$service\"}[5m])) by (job, http_method, http_target))", "format": "table", "instant": true }],
+      "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "job": "Service", "http_method": "Method", "http_target": "Route", "Value": "req/s" } } }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 3 }, "overrides": [] }
+    }
+  ]
+}

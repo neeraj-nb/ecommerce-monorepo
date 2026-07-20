@@ -2,9 +2,15 @@ auth_enabled: false
 
 server:
   http_listen_port: 3200
-  grpc_listen_port: 4317
+  # Tempo's own internal gRPC server (query-frontend <-> querier worker
+  # protocol; matches querier.frontend_worker.frontend_address below and the
+  # 9095 port published in docker-compose.yaml). Must NOT be 4317 -- that's
+  # the external OTLP gRPC ingest port below, and both listeners live in the
+  # same process, so sharing a port made the distributor fail to bind with
+  # "address already in use" and cascade-failed the rest of Tempo's startup.
+  grpc_listen_port: 9095
   http_listen_address: 0.0.0.0
-  grpc_listen_address: 0.0.0.0 
+  grpc_listen_address: 0.0.0.0
 
 distributor:
   receivers:
@@ -14,19 +20,6 @@ distributor:
           endpoint: 0.0.0.0:4317
         http:
           endpoint: 0.0.0.0:4318
-
-ingester:
-  lifecycler:
-    ring:
-      kvstore:
-        store: inmemory
-      replication_factor: 1
-  trace_idle_period: 10s
-  max_block_duration: 5m
-
-compactor:
-  compaction:
-    block_retention: 1h
 
 storage:
   trace:

@@ -3,5 +3,12 @@
 *.sh        text eol=lf
 entrypoint  text eol=lf
 
+# Config files read by Linux containers (bind-mounted, not baked into images).
+# Not required for correctness (Go's YAML parsers normalize CRLF), but kept LF
+# for consistency after this repo hit two separate CRLF-adjacent bugs.
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.conf      text eol=lf
+
 # Normalize text by default; let git detect binaries.
 * text=auto

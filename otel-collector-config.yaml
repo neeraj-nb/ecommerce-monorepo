@@ -5,8 +5,14 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 exporters:
+  # This is the LOCAL address this collector serves its own /metrics scrape
+  # endpoint on (the prometheus exporter is pull-based) -- not a remote push
+  # target. Must bind on all interfaces of THIS container; "prometheus:9464"
+  # resolved to the separate Prometheus server's IP, which this container
+  # can't bind to ("cannot assign requested address"). The standalone
+  # Prometheus server scrapes each agent by its own hostname (prometheus.yaml).
   prometheus:
-    endpoint: prometheus:9464
+    endpoint: 0.0.0.0:9464
 
   debug:
     verbosity: detailed

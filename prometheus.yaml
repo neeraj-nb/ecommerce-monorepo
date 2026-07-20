@@ -22,3 +22,9 @@ scrape_configs:
       - targets:
           - order-service-otel-agent:9464
     metrics_path: /metrics
+
+  - job_name: "payment-service"
+    static_configs:
+      - targets:
+          - payment-service-otel-agent:9464
+    metrics_path: /metrics

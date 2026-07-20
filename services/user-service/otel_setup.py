@@ -22,19 +22,18 @@ resource = Resource.create({
 })
 trace.set_tracer_provider(TracerProvider(resource=resource))
 
-otlp_trace_exporter = OTLPSpanExporter(
-    endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318/v1/traces"),
-    timeout=5,
-)
+# Leave endpoint unset: the SDK reads OTEL_EXPORTER_OTLP_ENDPOINT itself and
+# auto-appends the correct per-signal path (/v1/traces, /v1/metrics). Passing
+# endpoint= explicitly (as this used to) bypasses that entirely, so requests
+# went to the bare base URL instead and were silently dropped by the collector
+# -- BatchSpanProcessor/PeriodicExportingMetricReader swallow export failures.
+otlp_trace_exporter = OTLPSpanExporter(timeout=5)
 
 span_processor = BatchSpanProcessor(otlp_trace_exporter)
 trace.get_tracer_provider().add_span_processor(span_processor)
 
 # Metrics
-otlp_metric_exporter = OTLPMetricExporter(
-    endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318/v1/metrics"),
-    timeout=5,
-)
+otlp_metric_exporter = OTLPMetricExporter(timeout=5)
 
 metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter)
 
