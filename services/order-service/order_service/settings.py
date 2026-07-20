@@ -148,3 +148,23 @@ PRODUCT_SERVICE_URL = os.environ.get('PRODUCT_SERVICE_URL')
 KAFKA_BOOTSTRAP_SERVERS = os.environ.get(
     'KAFKA_BOOTSTRAP_SERVERS', 'redpanda:9092'
 ).split(',')
+
+# Logging: ship app logs to Logstash (see logstash_handler.py) alongside the
+# usual console output. A dead/unreachable Logstash never crashes the app --
+# SocketHandler.emit swallows connection errors internally.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+        'logstash': {
+            'class': 'logstash_handler.LogstashTCPHandler',
+            'host': os.environ.get('LOGSTASH_HOST', 'logstash'),
+            'port': int(os.environ.get('LOGSTASH_PORT', 5044)),
+        },
+    },
+    'root': {
+        'handlers': ['console', 'logstash'],
+        'level': 'INFO',
+    },
+}

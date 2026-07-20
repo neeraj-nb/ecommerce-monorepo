@@ -162,3 +162,23 @@ PAYMENT_FAILURE_RATE = min(max(_parse_float(os.environ.get('PAYMENT_FAILURE_RATE
 
 # Optional simulated gateway latency, in seconds.
 PAYMENT_DELAY_SECONDS = _parse_float(os.environ.get('PAYMENT_DELAY_SECONDS', '0'), 0.0)
+
+# Logging: ship app logs to Logstash (see logstash_handler.py) alongside the
+# usual console output. A dead/unreachable Logstash never crashes the app --
+# SocketHandler.emit swallows connection errors internally.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+        'logstash': {
+            'class': 'logstash_handler.LogstashTCPHandler',
+            'host': os.environ.get('LOGSTASH_HOST', 'logstash'),
+            'port': int(os.environ.get('LOGSTASH_PORT', 5044)),
+        },
+    },
+    'root': {
+        'handlers': ['console', 'logstash'],
+        'level': 'INFO',
+    },
+}
