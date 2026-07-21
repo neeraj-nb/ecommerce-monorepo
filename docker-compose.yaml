@@ -344,7 +344,13 @@ services:
     restart: unless-stopped
     ports:
       - 9090:9090
-    command: ["--config.file=/etc/prometheus/prometheus.yaml"]
+    # --web.enable-remote-write-receiver: lets k6's Prometheus remote-write
+    # output push load-test metrics (VUs, req rate/latency, threshold results)
+    # into this same Prometheus, so a load-test run overlays on the app's own
+    # Grafana dashboards instead of living in a separate report.
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yaml"
+      - "--web.enable-remote-write-receiver"
     volumes:
       - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
       - prometheus_data:/prometheus
@@ -434,6 +440,36 @@ services:
       - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
     networks:
       - ecom-net
+
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    profiles: ["loadtest"] # never starts with a plain `docker compose up`
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - payment-service
+    environment:
+      # Internal docker-network hostnames -- same shape a future k8s Service
+      # DNS name would take, so these scripts need no changes after migrating.
+      - USER_URL=http://user-service:8000
+      - PRODUCT_URL=http://product-service:8000
+      - ORDER_URL=http://order-service:8000
+      - PAYMENT_URL=http://payment-service:8000
+      - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+      # Pin exactly which stats k6 computes for Trend metrics (http_req_duration,
+      # saga_completion_time, ...) so the Prometheus series names/suffixes this
+      # produces (k6_<metric>_p95 etc.) are deterministic -- not left to
+      # whatever k6's own default happens to be on a given image version.
+      - K6_PROMETHEUS_RW_TREND_STATS=p(95),p(99),avg,min,max
+    volumes:
+      - ./load-tests/k6:/scripts
+    networks:
+      - ecom-net
+    # Default: run the smoke gate. Override for the full load test, e.g.:
+    #   docker compose --profile loadtest run k6 run /scripts/load-test.js --out experimental-prometheus-rw
+    command: run /scripts/smoke.js --out experimental-prometheus-rw
 
   debug:
     image: neerajbabu/debug-container

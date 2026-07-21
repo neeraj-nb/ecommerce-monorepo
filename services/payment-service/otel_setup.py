@@ -35,7 +35,11 @@ trace.get_tracer_provider().add_span_processor(span_processor)
 # Metrics
 otlp_metric_exporter = OTLPMetricExporter(timeout=5)
 
-metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter)
+# 10s: just under Prometheus's 15s scrape_interval (prometheus.yaml), so every
+# scrape sees fresh data without exporting faster than anything downstream
+# reads (the default 60s otherwise leaves dashboards looking stale for a while
+# after traffic happens).
+metric_reader = PeriodicExportingMetricReader(otlp_metric_exporter, export_interval_millis=10000)
 
 metrics.set_meter_provider(
     MeterProvider(

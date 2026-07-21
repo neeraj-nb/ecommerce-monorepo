@@ -1,0 +1,29 @@
+# Override: makes payments realistically fail sometimes during a load test,
+# exercising the CANCELLED/inventory-release compensation path under load --
+# the base compose's PAYMENT_MODE=always_success never triggers it.
+#
+# Kept as a separate opt-in overlay rather than changed in the base file
+# because smoke.js's deploy-gate assertion ("payment succeeded") relies on
+# always_success being deterministic; flipping the default there would make
+# the smoke gate flaky.
+#
+# Use:
+#   docker compose -f docker-compose.yaml -f docker-compose.loadtest.yml \
+#     up -d payment-service payment-consumer
+#   docker compose --profile loadtest run k6 run /scripts/load-test.js --out experimental-prometheus-rw
+#
+#   # revert afterward (base file only, restores always_success):
+#   docker compose up -d payment-service payment-consumer
+#
+# Verify the merge before relying on it:
+#   docker compose -f docker-compose.yaml -f docker-compose.loadtest.yml config
+
+services:
+  payment-service:
+    environment:
+      - PAYMENT_MODE=random
+      - PAYMENT_FAILURE_RATE=0.05
+  payment-consumer:
+    environment:
+      - PAYMENT_MODE=random
+      - PAYMENT_FAILURE_RATE=0.05
