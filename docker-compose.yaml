@@ -114,6 +114,24 @@ services:
     restart: unless-stopped
     command: python manage.py run_inventory_consumer
 
+  product-outbox-relay:
+    image: neerajbabu/product-service
+    build:
+      context: ./services/product-service
+      dockerfile: Dockerfile
+    container_name: product-outbox-relay
+    depends_on:
+      - product-database
+      - redpanda
+      - product-service # web owns migrations; relay just waits and retries
+    environment: *product-env
+    volumes:
+      - ./services/product-service:/app
+    networks:
+      - ecom-net
+    restart: unless-stopped
+    command: python manage.py run_outbox_relay
+
   product-database:
     image: postgres:17
     container_name: product-database
@@ -218,6 +236,24 @@ services:
     restart: unless-stopped
     command: python manage.py run_order_consumer
 
+  order-outbox-relay:
+    image: neerajbabu/order-service
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    container_name: order-outbox-relay
+    depends_on:
+      - order-database
+      - redpanda
+      - order-service # web owns migrations; relay just waits and retries
+    environment: *order-env
+    volumes:
+      - ./services/order-service:/app
+    networks:
+      - ecom-net
+    restart: unless-stopped
+    command: python manage.py run_outbox_relay
+
   order-database:
     image: postgres:17
     container_name: order-database
@@ -304,6 +340,24 @@ services:
       - ecom-net
     restart: unless-stopped
     command: python manage.py run_payment_consumer
+
+  payment-outbox-relay:
+    image: neerajbabu/payment-service
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: payment-outbox-relay
+    depends_on:
+      - payment-database
+      - redpanda
+      - payment-service # web owns migrations; relay just waits and retries
+    environment: *payment-env
+    volumes:
+      - ./services/payment-service:/app
+    networks:
+      - ecom-net
+    restart: unless-stopped
+    command: python manage.py run_outbox_relay
 
   payment-database:
     image: postgres:17

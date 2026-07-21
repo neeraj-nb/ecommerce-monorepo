@@ -8,8 +8,11 @@ events, mirroring the order-service's ``saga.py``:
 * reservation is guarded by ``order_id`` (unique), and release by reservation
   status, so replays / out-of-order delivery are no-ops (belt-and-braces with
   the consumer's ``ProcessedEvent`` dedupe);
-* outbound events are emitted via ``transaction.on_commit`` so they only fire
-  after the DB change durably commits.
+* outbound events are recorded via ``events.enqueue`` (a transactional outbox
+  write) in the SAME transaction as the state change, so "the state changed"
+  and "this needs to reach Kafka" are atomic with each other -- a separate
+  relay process delivers them, so a Kafka outage can't turn a successful
+  write into a client-facing error or a silently-dropped event.
 """
 
 import logging
@@ -25,9 +28,7 @@ logger = logging.getLogger(__name__)
 
 def _emit_rejected(order_id, user_id, reason):
     data = {"order_id": order_id, "user_id": user_id, "reason": reason}
-    transaction.on_commit(
-        lambda: events.publish(events.TOPIC_INVENTORY_REJECTED, order_id, data)
-    )
+    events.enqueue(events.TOPIC_INVENTORY_REJECTED, order_id, data)
     logger.info("order %s -> inventory REJECTED: %s", order_id, reason)
 
 
@@ -90,9 +91,7 @@ def reserve_for_order(order_id, user_id, items, total_amount=None, currency="USD
         "currency": currency,
         "items": [{"product_id": pid, "quantity": qty} for pid, qty in wanted.items()],
     }
-    transaction.on_commit(
-        lambda: events.publish(events.TOPIC_INVENTORY_RESERVED, order_id, data)
-    )
+    events.enqueue(events.TOPIC_INVENTORY_RESERVED, order_id, data)
     logger.info("order %s -> inventory RESERVED (%d lines)", order_id, len(wanted))
 
 

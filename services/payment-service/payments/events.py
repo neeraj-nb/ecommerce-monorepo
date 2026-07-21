@@ -78,15 +78,31 @@ def build_envelope(event_type, data):
     }
 
 
-def publish(topic, key, data):
-    """Publish one enveloped event to ``topic``, keyed by ``key`` (order id).
+def enqueue(topic, key, data):
+    """Durably record that ``topic`` needs to be published, keyed by ``key``.
 
-    Call this from within ``transaction.on_commit(...)`` so an event is only
-    emitted after the owning DB transaction has durably committed.
+    Call this from INSIDE the same transaction as the state change it
+    announces (no ``on_commit`` needed -- it's a plain DB write). This is the
+    transactional-outbox write side: it makes "the state changed" and "this
+    needs to reach Kafka" atomic with each other, rather than depending on
+    Kafka being reachable at commit time. A separate relay process
+    (``run_outbox_relay``) delivers it independently; see events.send_envelope.
     """
+    from .models import Outbox  # local import: models imports nothing from here
+
     envelope = build_envelope(topic, data)
+    Outbox.objects.create(topic=topic, key=str(key), envelope=envelope)
+    return envelope
+
+
+def send_envelope(topic, key, envelope):
+    """Actually publish a pre-built envelope to Kafka. Used only by the outbox
+    relay -- the envelope (and its event_id) was already built once at
+    enqueue() time, not regenerated here, so a retried delivery (e.g. after an
+    ambiguous timeout) resends the SAME event_id rather than minting a new
+    one, keeping consumer-side dedup-by-event_id correct.
+    """
     producer = get_producer()
     producer.send(topic, key=key, value=envelope)
     producer.flush(timeout=10)
     logger.info("published %s event_id=%s key=%s", topic, envelope["event_id"], key)
-    return envelope

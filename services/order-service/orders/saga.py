@@ -8,8 +8,11 @@ so the checkout API and the Kafka consumer share identical, race-safe logic:
 * each transition is **guarded by the current status**, so replays / out-of-order
   delivery are no-ops (belt-and-braces with the consumer's ``ProcessedEvent``
   dedupe);
-* outbound events are emitted via ``transaction.on_commit`` so they only fire
-  after the DB change durably commits.
+* outbound events are recorded via ``events.enqueue`` (a transactional outbox
+  write) in the SAME transaction as the state change, so "the state changed"
+  and "this needs to reach Kafka" are atomic with each other -- a separate
+  relay process delivers them, so a Kafka outage can't turn a successful
+  write into a client-facing error or a silently-dropped event.
 """
 
 import logging
@@ -33,16 +36,12 @@ def _emit_order_cancelled(order, reason):
         "items": items,
         "reason": reason,
     }
-    transaction.on_commit(
-        lambda: events.publish(events.TOPIC_ORDER_CANCELLED, order.id, data)
-    )
+    events.enqueue(events.TOPIC_ORDER_CANCELLED, order.id, data)
 
 
 def _emit_order_confirmed(order):
     data = {"order_id": order.id, "user_id": order.user_id}
-    transaction.on_commit(
-        lambda: events.publish(events.TOPIC_ORDER_CONFIRMED, order.id, data)
-    )
+    events.enqueue(events.TOPIC_ORDER_CONFIRMED, order.id, data)
 
 
 def _lock_order(order_id):
@@ -98,9 +97,7 @@ def checkout_cart(cart, shipping_name="", shipping_address=""):
         "total_amount": str(total),
         "currency": order.currency,
     }
-    transaction.on_commit(
-        lambda: events.publish(events.TOPIC_ORDER_CREATED, order.id, data)
-    )
+    events.enqueue(events.TOPIC_ORDER_CREATED, order.id, data)
     logger.info("checkout: created order %s for user %s", order.id, order.user_id)
     return order
 

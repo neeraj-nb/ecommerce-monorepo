@@ -29,9 +29,7 @@ def _emit_payment_succeeded(payment):
         "payment_number": payment.payment_number,
         "transaction_id": payment.gateway_reference,
     }
-    transaction.on_commit(
-        lambda: events.publish(events.TOPIC_PAYMENT_SUCCEEDED, payment.order_id, data)
-    )
+    events.enqueue(events.TOPIC_PAYMENT_SUCCEEDED, payment.order_id, data)
 
 
 def _emit_payment_failed(payment):
@@ -41,9 +39,7 @@ def _emit_payment_failed(payment):
         "payment_number": payment.payment_number,
         "reason": payment.failure_reason or "Payment failed.",
     }
-    transaction.on_commit(
-        lambda: events.publish(events.TOPIC_PAYMENT_FAILED, payment.order_id, data)
-    )
+    events.enqueue(events.TOPIC_PAYMENT_FAILED, payment.order_id, data)
 
 
 def _to_amount(value):
@@ -62,8 +58,9 @@ def process_payment(order_id, user_id, amount, currency="USD", source_event_id=N
     the order, it is returned unchanged (no re-charge). The consumer additionally
     dedupes redelivery by ``event_id`` via ``ProcessedEvent``.
 
-    Returns the Payment row. Emits ``payment.succeeded`` / ``payment.failed`` on
-    commit.
+    Returns the Payment row. Records ``payment.succeeded`` / ``payment.failed``
+    to the transactional outbox (same transaction) for a separate relay
+    process to deliver -- see events.enqueue.
     """
     existing = Payment.objects.filter(
         order_id=order_id, status=Payment.Status.SUCCEEDED
