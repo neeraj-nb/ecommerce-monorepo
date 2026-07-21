@@ -13,11 +13,12 @@ is handled, so a crash mid-processing re-delivers rather than loses the event.
 import json
 import logging
 import signal
+import time
 
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError, transaction
 
-from orders import events, saga
+from orders import consumer_metrics, events, saga
 from orders.models import ProcessedEvent
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,9 @@ class Command(BaseCommand):
                     for message in messages:
                         self._process(message)
                     consumer.commit()
+                # Same thread as poll() -- kafka-python's client isn't
+                # thread-safe, so lag is computed here, not via an async gauge.
+                consumer_metrics.maybe_record_lag(consumer)
         finally:
             consumer.close()
 
@@ -74,8 +78,10 @@ class Command(BaseCommand):
 
         if not event_id or order_id is None:
             logger.warning("skipping malformed message on %s: %r", message.topic, envelope)
+            consumer_metrics.record_event(event_type, "malformed", 0.0)
             return
 
+        start = time.monotonic()
         try:
             with transaction.atomic():
                 # Insert-first dedupe: the unique event_id makes a replay raise
@@ -83,10 +89,13 @@ class Command(BaseCommand):
                 # commit or both roll back.
                 ProcessedEvent.objects.create(event_id=event_id, event_type=event_type)
                 self._route(message.topic, order_id, data)
+            consumer_metrics.record_event(event_type, "success", (time.monotonic() - start) * 1000)
         except IntegrityError:
             logger.info("duplicate event %s (%s) ignored", event_id, event_type)
+            consumer_metrics.record_event(event_type, "duplicate", (time.monotonic() - start) * 1000)
         except Exception:  # noqa: BLE001 - log and move on; offset not committed on crash
             logger.exception("failed handling %s for order %s", event_type, order_id)
+            consumer_metrics.record_event(event_type, "error", (time.monotonic() - start) * 1000)
             raise
 
     def _route(self, topic, order_id, data):
